@@ -11,6 +11,10 @@ import UIKit
 
 @IBDesignable
 public class ABGaugeView: UIView {
+    private var prevNeedleValue: CGFloat = 0
+    private var triangleLayer: CAShapeLayer?
+    private var shadowLayer: CAShapeLayer?
+    private var circleLayer: CAShapeLayer?
     
     // MARK:- @IBInspectable
     @IBInspectable public var colorCodes: String = "929918,C8CC86,66581A,3A4A73,185D99"
@@ -19,6 +23,9 @@ public class ABGaugeView: UIView {
     
     @IBInspectable public var needleColor: UIColor = UIColor(red: 18/255.0, green: 112/255.0, blue: 178/255.0, alpha: 1.0)
     @IBInspectable public var needleValue: CGFloat = 0 {
+        willSet {
+            prevNeedleValue = needleValue >= 0 ? needleValue : 0
+        }
         didSet {
             setNeedsDisplay()
         }
@@ -51,12 +58,12 @@ public class ABGaugeView: UIView {
     
     public override init(frame: CGRect) {
         super.init(frame: frame)
-        drawGauge()
+        //        drawGauge()
     }
     
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
-        drawGauge()
+        //        drawGauge()
     }
     
     override public func layoutSubviews() {
@@ -66,10 +73,10 @@ public class ABGaugeView: UIView {
     
     // MARK:- Custom Methods
     func drawGauge() {
-        layer.sublayers = []
+        layer.sublayers?.removeAll(where: {$0.name?.contains("arc") ?? false})
         drawSmartArc()
-        drawNeedle()
         drawNeedleCircle()
+        drawNeedle()
     }
     
     func drawSmartArc() {
@@ -155,66 +162,67 @@ public class ABGaugeView: UIView {
                                 startAngle: startAngle,
                                 endAngle: endAngle,
                                 clockwise: true)
-        // 3
         path.lineWidth = lineWidth
         path.lineCapStyle = arcCap
-        strokeColor.setStroke()
-        path.stroke()
+        
+        let shapeLayer = CAShapeLayer()
+        shapeLayer.name = "arc"
+        shapeLayer.path = path.cgPath
+        shapeLayer.strokeColor = strokeColor.cgColor
+        shapeLayer.lineWidth = lineWidth
+        shapeLayer.lineCap = CAShapeLayerLineCap.round
+        shapeLayer.fillColor = UIColor.clear.cgColor
+        
+        layer.insertSublayer(shapeLayer, at: 3)
     }
     
     func drawNeedleCircle() {
-        // 1
-        let circleLayer = CAShapeLayer()
-        let circlePath = UIBezierPath(arcCenter: CGPoint(x: bounds.width / 2, y: bounds.height / 2), radius: self.bounds.width/20, startAngle: 0.0, endAngle: CGFloat(2 * Double.pi), clockwise: false)
-        // 2
-        circleLayer.path = circlePath.cgPath
-        circleLayer.fillColor = circleColor.cgColor
-        layer.addSublayer(circleLayer)
+        if circleLayer == nil {
+            circleLayer = CAShapeLayer()
+            let circlePath = UIBezierPath(arcCenter: CGPoint(x: bounds.width / 2, y: bounds.height / 2), radius: self.bounds.width/20, startAngle: 0.0, endAngle: CGFloat(2 * Double.pi), clockwise: false)
+            // 2
+            circleLayer?.path = circlePath.cgPath
+            circleLayer?.fillColor = circleColor.cgColor
+            layer.insertSublayer(circleLayer!, at: 0)
+        }
     }
     
     func drawNeedle() {
-        // 1
-        let triangleLayer = CAShapeLayer()
-        let shadowLayer = CAShapeLayer()
+        if triangleLayer == nil, shadowLayer == nil {
+            triangleLayer = CAShapeLayer()
+            shadowLayer = CAShapeLayer()
+            triangleLayer?.frame = bounds
+            shadowLayer?.frame = CGRect(x: bounds.origin.x, y: bounds.origin.y + 5, width: bounds.width, height: bounds.height)
+            
+            let needlePath = UIBezierPath()
+            needlePath.move(to: CGPoint(x: self.bounds.width/2, y: self.bounds.width * 0.95))
+            needlePath.addLine(to: CGPoint(x: self.bounds.width * 0.47, y: self.bounds.width * 0.42))
+            needlePath.addLine(to: CGPoint(x: self.bounds.width * 0.53, y: self.bounds.width * 0.42))
+            
+            needlePath.close()
+            
+            triangleLayer?.path = needlePath.cgPath
+            shadowLayer?.path = needlePath.cgPath
+            
+            triangleLayer?.fillColor = needleColor.cgColor
+            triangleLayer?.strokeColor = needleColor.cgColor
+            shadowLayer?.fillColor = shadowColor.cgColor
+            
+            layer.insertSublayer(triangleLayer!, at: 1)
+            layer.insertSublayer(shadowLayer!, at: 2)
+        }
         
-        // 2
-        triangleLayer.frame = bounds
-        shadowLayer.frame = CGRect(x: bounds.origin.x, y: bounds.origin.y + 5, width: bounds.width, height: bounds.height)
-        
-        // 3
-        let needlePath = UIBezierPath()
-        needlePath.move(to: CGPoint(x: self.bounds.width/2, y: self.bounds.width * 0.95))
-        needlePath.addLine(to: CGPoint(x: self.bounds.width * 0.47, y: self.bounds.width * 0.42))
-        needlePath.addLine(to: CGPoint(x: self.bounds.width * 0.53, y: self.bounds.width * 0.42))
-        
-        needlePath.close()
-        
-        // 4
-        triangleLayer.path = needlePath.cgPath
-        shadowLayer.path = needlePath.cgPath
-        
-        // 5
-        triangleLayer.fillColor = needleColor.cgColor
-        triangleLayer.strokeColor = needleColor.cgColor
-        shadowLayer.fillColor = shadowColor.cgColor
-        // 6
-        layer.addSublayer(shadowLayer)
-        layer.addSublayer(triangleLayer)
         
         var firstAngle = radian(for: 0)
+        let circleRadians: CGFloat = 2.0 * .pi
         
-        let degrees:CGFloat = 3.6 * 100 // Entire Arc is of 240 degrees
-        let radians = degrees * .pi/(1.8*100)
+        let arcRadians: CGFloat = arcAngle * .pi / 1.8
+        let diff = (circleRadians - arcRadians) / 2
+        firstAngle += diff
         
-        let thisRadians = (arcAngle * 100) * .pi/(1.8*100)
-        let theD = (radians - thisRadians)/2
-        firstAngle += theD
-        let needleValue = radian(for: self.needleValue) + firstAngle
-        animate(triangleLayer: triangleLayer, shadowLayer: shadowLayer, fromValue: 0, toValue: needleValue*1.05, duration: 0.5) {
-            self.animate(triangleLayer: triangleLayer, shadowLayer: shadowLayer, fromValue: needleValue*1.05, toValue: needleValue*0.95, duration: 0.4, callBack: {
-                self.animate(triangleLayer: triangleLayer, shadowLayer: shadowLayer, fromValue: needleValue*0.95, toValue: needleValue, duration: 0.6, callBack: {})
-            })
-        }
+        let fromValue = radian(for: prevNeedleValue) + firstAngle
+        let toValue = radian(for: needleValue) + firstAngle
+        animate(triangleLayer: triangleLayer!, shadowLayer: shadowLayer!, fromValue: fromValue, toValue: toValue, duration: 0.6, callBack: {})
     }
     
     func animate(triangleLayer: CAShapeLayer, shadowLayer:CAShapeLayer, fromValue: CGFloat, toValue:CGFloat, duration: CFTimeInterval, callBack:@escaping ()->Void) {
